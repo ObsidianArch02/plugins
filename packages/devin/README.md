@@ -55,7 +55,9 @@ The plugin's `fetch` handles this:
     `image_url` parts, and the ones magpie's gateway puts in the user
     message after the results ("[From the result of …]").
 - It turns the streamed reply back into a chat completion, streamed or
-  not: text, reasoning, tool calls and usage.
+  not: text, reasoning, tool calls and usage. Devin sends a tool call's
+  arguments whole and its text in long runs; streamed, they go out in
+  pieces of at most 32 characters, so a client draws them as they come.
 - Failures keep their statuses: a refused token is a 401, a usage limit a
   429, a prompt too long for the model a 400.
 

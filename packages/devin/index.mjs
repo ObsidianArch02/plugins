@@ -1543,6 +1543,24 @@ function failure(status, text) {
   return { status, message: msg }
 }
 
+// PIECE is how long a piece of text, reasoning or a tool call's arguments
+// goes out at most. Devin sends a call's arguments whole, and its text in
+// long runs; a client draws what it is sent as it comes (magpie-community/
+// plugins#224), and puts the pieces back together by joining them.
+const PIECE = 32
+
+// pieces cuts s into runs of at most n UTF-16 units, none splitting a
+// surrogate pair: a lone half in a chunk's JSON is no character to a
+// client that is not JavaScript.
+function* pieces(s, n = PIECE) {
+  for (let i = 0; i < s.length; ) {
+    let j = Math.min(i + n, s.length)
+    if (j < s.length && j - i > 1 && (s.charCodeAt(j - 1) & 0xfc00) === 0xd800) j--
+    yield s.slice(i, j)
+    i = j
+  }
+}
+
 // events turns the reply's frames into chat completion pieces: text,
 // reasoning, each tool call opened with its id and name, its arguments in
 // pieces after, then the finish with the usage.
@@ -1572,10 +1590,10 @@ async function* events(it) {
     for (const x of fields(f.data)) {
       if (x.num === 3 && x.wire === 2 && x.data.length) {
         said += x.data.length
-        yield { text: dec.decode(x.data) }
+        for (const p of pieces(dec.decode(x.data))) yield { text: p }
       } else if (x.num === 9 && x.wire === 2 && x.data.length) {
         said += x.data.length
-        yield { reasoning: dec.decode(x.data) }
+        for (const p of pieces(dec.decode(x.data))) yield { reasoning: p }
       } else if (x.num === 6 && x.wire === 2) {
         let id = ""
         let name = ""
@@ -1589,7 +1607,7 @@ async function* events(it) {
           tools++
           yield { tool: { index: tools, id: id ? outID(id) : "call_" + randomBytes(12).toString("hex"), name } }
         }
-        if (args && tools >= 0) yield { args: { index: tools, text: args } }
+        if (args && tools >= 0) for (const p of pieces(args)) yield { args: { index: tools, text: p } }
       } else if (x.num === 5 && x.wire === 0) stop = x.n
       else if (x.num === 7 && x.wire === 2) {
         for (const g of fields(x.data)) {
@@ -1892,4 +1910,4 @@ export async function DevinAuthPlugin() {
 }
 
 // for tests
-export const _internal = { parseFree, parsePrices, geminiSchema, freeIDs, outID, inID, objectRoot, seesImages, imagesFor, forgetSaid: () => said.clear(), parseModelConfigs, parseConfigFamilies, SNAPSHOT_IMAGES, withImages, forgetImages: () => (seen = null), effortOf, runtimeModel, configModel, live, build, failure, complete, parseFamilies, listed, variantFor, familiesOf, SNAPSHOT, parseStatus, readsHome, tierName, whoByKey, success, familiesFor, readCredentials, credentials, fields, frame, PB, events, frames }
+export const _internal = { parseFree, parsePrices, geminiSchema, freeIDs, outID, inID, objectRoot, seesImages, imagesFor, forgetSaid: () => said.clear(), parseModelConfigs, parseConfigFamilies, SNAPSHOT_IMAGES, withImages, forgetImages: () => (seen = null), effortOf, runtimeModel, configModel, live, build, failure, complete, parseFamilies, listed, variantFor, familiesOf, SNAPSHOT, parseStatus, readsHome, tierName, whoByKey, success, familiesFor, readCredentials, credentials, fields, frame, PB, events, frames, pieces, PIECE }
